@@ -4,25 +4,60 @@ An end-to-end data engineering project: historical CSVs plus a live ordering API
 
 ## Architecture
 
-```
-Ordering API (FastAPI)
-      |
-      v
-AWS Lambda (checkpointed polling)
-      |
-      v
-S3  api_raw/orders/*.json        S3  raw/ecommerce/*.csv (historical)
-      |                                   |
-      +---------------+-------------------+
-                      v
-          AWS Glue job (PySpark)
-   clean -> validate -> dedupe -> star schema
-                      |
-                      v
-     S3 curated/processed Parquet (Snappy)
-                      |
-                      v
-   Glue Crawler -> Glue Data Catalog -> Amazon Athena
+
+```mermaid
+flowchart TB
+    subgraph Sources["1. Data Sources"]
+        CSV["Historical E-Commerce CSV Files"]
+        API["FastAPI Ordering Service"]
+    end
+
+    subgraph Ingestion["2. Data Ingestion"]
+        S3RAW[("Amazon S3 — Raw CSV Data")]
+        Lambda["AWS Lambda<br/>Scheduled API Polling"]
+        Checkpoint[("S3 Checkpoint<br/>Last Processed Order ID")]
+        JSON[("Amazon S3<br/>API Order JSON Files")]
+    end
+
+    subgraph Processing["3. Data Processing"]
+        Glue["AWS Glue ETL<br/>PySpark"]
+        Quality["Data Quality Checks<br/>Cleaning & Deduplication"]
+        Model["Dimensional Modeling<br/>10 Dimensions · 6 Facts · Bridge"]
+    end
+
+    subgraph Analytics["4. Storage & Analytics"]
+        Processed[("Amazon S3<br/>Processed Snappy Parquet")]
+        Crawler["AWS Glue Crawler"]
+        Catalog[("AWS Glue Data Catalog")]
+        Athena["Amazon Athena"]
+        Results["Analytical SQL Queries<br/>KPIs & Business Insights"]
+    end
+
+    CSV --> S3RAW
+    API --> Lambda
+    Checkpoint <--> Lambda
+    Lambda -->|"New orders"| JSON
+
+    S3RAW --> Glue
+    JSON --> Glue
+    Glue --> Quality
+    Quality --> Model
+    Model --> Processed
+
+    Processed --> Crawler
+    Crawler --> Catalog
+    Catalog --> Athena
+    Athena --> Results
+
+    classDef source fill:#E8F1FF,stroke:#356AC3,color:#172B4D
+    classDef ingestion fill:#FFF0D9,stroke:#C27A16,color:#553400
+    classDef processing fill:#E7F6EC,stroke:#29834A,color:#123D24
+    classDef analytics fill:#F0E8FF,stroke:#7852B8,color:#342052
+
+    class CSV,API source
+    class S3RAW,Lambda,Checkpoint,JSON ingestion
+    class Glue,Quality,Model processing
+    class Processed,Crawler,Catalog,Athena,Results analytics
 ```
 
 ## Repository layout
